@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Mem Reduct
+GenericName=Memory reduction utility
+Comment=Watches RAM usage and reduces memory pressure on demand
+Exec=memreduct
+Icon=memreduct
+Categories=System;Monitor;
+Keywords=memory;ram;clean;reduce;
+Terminal=false
+StartupNotify=false
