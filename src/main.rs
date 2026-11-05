@@ -7,6 +7,8 @@ mod shotctl;
 mod system;
 #[cfg(windows)]
 mod tray;
+#[cfg(not(windows))]
+mod tray;
 
 use eframe::egui;
 
@@ -56,8 +58,8 @@ fn main() -> Result<(), eframe::Error> {
     let screenshot_path = parse_flags();
 
     let viewport = egui::ViewportBuilder::default()
-        .with_inner_size([560.0, 700.0])
-        .with_min_inner_size([440.0, 520.0])
+        .with_inner_size([420.0, 460.0])
+        .with_min_inner_size([340.0, 360.0])
         .with_icon(egui::IconData {
             width: 32,
             height: 32,

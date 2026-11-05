@@ -411,14 +411,12 @@ mod platform {
 
     fn drop_caches() -> Result<(), String> {
         use std::io::Write;
-        let mut sync = std::process::Command::new("sync")
+        // Best effort: if `sync` is missing the drop_caches write below still
+        // runs; flush errors of `sync` itself are intentionally ignored.
+        let _ = std::process::Command::new("sync")
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .status();
-        if sync.is_err() {
-            sync = Err(String::from("sync not found"));
-        }
-        let _ = sync;
         let mut file = std::fs::OpenOptions::new()
             .write(true)
             .open("/proc/sys/vm/drop_caches")

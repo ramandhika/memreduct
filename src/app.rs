@@ -65,13 +65,27 @@ impl App {
                 let stats = *shared.stats.lock().unwrap();
                 let color = crate::tray::color_for(stats.load_percent);
                 let tooltip = tray_tooltip(stats);
-                crate::tray::Tray::new(color, &tooltip, settings.autoreduce).ok()
+                crate::tray::Tray::new(stats.load_percent, color, &tooltip, settings.autoreduce)
+                    .ok()
             } else {
                 None
             }
         };
         #[cfg(not(windows))]
-        let tray = None;
+        let tray = {
+            if settings.show_tray && screenshot.is_none() {
+                let stats = *shared.stats.lock().unwrap();
+                crate::tray::Tray::new(
+                    stats.load_percent,
+                    crate::tray::color_for(stats.load_percent),
+                    &tray_tooltip(stats),
+                    settings.autoreduce,
+                )
+                .ok()
+            } else {
+                None
+            }
+        };
 
         App {
             shared,
@@ -126,6 +140,10 @@ impl App {
                 crate::tray::TrayAction::Show => {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
                     ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+                }
+                crate::tray::TrayAction::ToggleAuto => {
+                    self.settings.autoreduce = !self.settings.autoreduce;
+                    self.persist();
                 }
                 crate::tray::TrayAction::Exit => {
                     self.exit_requested = true;
@@ -263,14 +281,14 @@ fn fmt_gib(bytes: u64) -> String {
 
 fn draw_ui(app: &mut App, ctx: &egui::Context) {
     egui::SidePanel::left("nav_panel")
-        .exact_width(180.0)
+        .exact_width(124.0)
         .resizable(false)
         .show(ctx, |ui| draw_nav(ui, app));
 
     egui::CentralPanel::default()
         .frame(
             egui::Frame::NONE
-                .inner_margin(egui::Margin::same(18))
+                .inner_margin(egui::Margin::same(12))
                 .fill(egui::Color32::from_rgb(0x1E, 0x21, 0x26)),
         )
         .show(ctx, |ui| match app.page {
@@ -284,6 +302,7 @@ fn draw_ui(app: &mut App, ctx: &egui::Context) {
     if let Some(tray) = &app.tray {
         let stats = app.stats();
         tray.update_look(
+            stats.load_percent,
             crate::tray::color_for(stats.load_percent),
             &tray_tooltip(stats),
         );
@@ -291,18 +310,18 @@ fn draw_ui(app: &mut App, ctx: &egui::Context) {
 }
 
 fn draw_nav(ui: &mut egui::Ui, app: &mut App) {
-    ui.add_space(14.0);
+    ui.add_space(10.0);
     ui.label(
         egui::RichText::new("Mem Reduct")
-            .size(24.0)
+            .size(18.0)
             .color(egui::Color32::from_rgb(0xAF, 0xD8, 0xAD)),
     );
     ui.label(
         egui::RichText::new("memory reduction")
-            .size(12.0)
+            .size(10.0)
             .color(egui::Color32::from_gray(110)),
     );
-    ui.add_space(34.0);
+    ui.add_space(18.0);
 
     for (page, label) in [
         (Page::Main, "Main"),
@@ -310,7 +329,7 @@ fn draw_nav(ui: &mut egui::Ui, app: &mut App) {
         (Page::Tray, "Tray"),
         (Page::About, "About"),
     ] {
-        ui.add_space(2.0);
+        ui.add_space(1.5);
         ui.selectable_value(&mut app.page, page, label);
     }
 }
@@ -326,13 +345,13 @@ fn usage_color(percent: u32) -> egui::Color32 {
 }
 
 fn usage_bar(ui: &mut egui::Ui, frac: f32, color: egui::Color32, overlay: String) {
-    let height = 26.0;
+    let height = 22.0;
     let (rect, _) = ui.allocate_exact_size(
         egui::vec2(ui.available_width(), height),
         egui::Sense::hover(),
     );
     let painter = ui.painter_at(rect);
-    let rounding = egui::CornerRadius::same(6);
+    let rounding = egui::CornerRadius::same(5);
     painter.rect_filled(rect.expand2(egui::vec2(0.0, 2.0)), rounding, egui::Color32::from_gray(38));
     let mut fill = rect;
     let fill_w = rect.width() * frac.clamp(0.0, 1.0);
@@ -344,7 +363,7 @@ fn usage_bar(ui: &mut egui::Ui, frac: f32, color: egui::Color32, overlay: String
         rect.center(),
         egui::Align2::CENTER_CENTER,
         overlay,
-        egui::FontId::proportional(15.0),
+        egui::FontId::proportional(12.0),
         egui::Color32::WHITE,
     );
 }
@@ -356,7 +375,7 @@ fn draw_main(ui: &mut egui::Ui, app: &mut App) {
         ui.label(egui::RichText::new("Memory usage").heading());
         if app.shared.running.load(Ordering::SeqCst) {
             ui.add_space(10.0);
-            ui.add(egui::Spinner::new().size(20.0));
+            ui.add(egui::Spinner::new().size(16.0));
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if app.elevated {
@@ -373,7 +392,7 @@ fn draw_main(ui: &mut egui::Ui, app: &mut App) {
     let color = usage_color(stats.load_percent);
     ui.label(
         egui::RichText::new(format!("{}%", stats.load_percent))
-            .size(54.0)
+            .size(40.0)
             .strong()
             .color(color),
     );
@@ -384,11 +403,11 @@ fn draw_main(ui: &mut egui::Ui, app: &mut App) {
         format!("{} / {}", fmt_gib(stats.used_phys()), fmt_gib(stats.total_phys)),
     );
 
-    ui.add_space(10.0);
+    ui.add_space(8.0);
     ui.separator();
-    ui.add_space(6.0);
+    ui.add_space(5.0);
 
-    egui::Grid::new("stats_grid").spacing([16.0, 7.0]).show(ui, |ui| {
+    egui::Grid::new("stats_grid").spacing([12.0, 5.0]).show(ui, |ui| {
         ui.label("Physical memory");
         ui.label(format!(
             "{} used, {} available",
@@ -406,22 +425,22 @@ fn draw_main(ui: &mut egui::Ui, app: &mut App) {
         ui.end_row();
     });
 
-    ui.add_space(16.0);
+    ui.add_space(10.0);
 
     let cleaning = app.shared.running.load(Ordering::SeqCst);
     ui.add_enabled_ui(!cleaning, |ui| {
         let button = egui::Button::new(
             egui::RichText::new(if cleaning { "Cleaning…" } else { "Clean memory now" })
-                .size(18.0)
+                .size(14.0)
                 .strong(),
         )
-        .min_size(egui::vec2(ui.available_width(), 42.0));
+        .min_size(egui::vec2(ui.available_width(), 32.0));
         if ui.add(button).clicked() {
             app.start_clean();
         }
     });
 
-    ui.add_space(12.0);
+    ui.add_space(8.0);
 
     let last = *app.shared.last_clean.lock().unwrap();
     match last {
@@ -517,9 +536,9 @@ fn draw_reduction(ui: &mut egui::Ui, app: &mut App) {
     }
     changed |= interval_changed;
 
-    ui.add_space(16.0);
+    ui.add_space(10.0);
     ui.heading("Memory layers to clean");
-    ui.add_space(8.0);
+    ui.add_space(6.0);
 
     #[cfg(windows)]
     {
@@ -605,7 +624,7 @@ fn draw_tray_page(ui: &mut egui::Ui, app: &mut App) {
                 .small()
                 .weak(),
         );
-        ui.add_space(16.0);
+        ui.add_space(10.0);
         ui.heading("Menu");
         ui.label("Clean memory now — performs a cleaning.");
         ui.label("Show window — brings the window to the front.");
@@ -615,7 +634,26 @@ fn draw_tray_page(ui: &mut egui::Ui, app: &mut App) {
     #[cfg(not(windows))]
     {
         ui.label(
-            egui::RichText::new("The tray icon is not available in this Linux build yet.")
+            egui::RichText::new("The tray icon lives in the KDE status bar (system tray) and shows the current memory percentage right on its icon. Right-click it for the menu.")
+                .small()
+                .weak(),
+        );
+        ui.add_space(6.0);
+        let changed = ui
+            .checkbox(&mut app.settings.close_to_tray, "Closing the window keeps the app in the tray")
+            .changed();
+        if changed {
+            app.persist();
+        }
+        ui.add_space(10.0);
+        ui.heading("Menu");
+        ui.label("Clean memory now — performs a cleaning.");
+        ui.label("Show window — brings the window to the front.");
+        ui.label("Autoreduction — toggles automatic cleaning.");
+        ui.label("Exit — quits the app completely.");
+        ui.add_space(4.0);
+        ui.label(
+            egui::RichText::new("Enabling/disabling the tray icon applies on next start.")
                 .small()
                 .weak(),
         );

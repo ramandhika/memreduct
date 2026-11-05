@@ -15,6 +15,10 @@ serde_json = "1"
 [target.'cfg(windows)'.dependencies]
 tray-icon = "=0.20.0"
 
+[target.'cfg(not(windows))'.dependencies]
+# KDE/freedesktop StatusNotifierItem tray (status bar on Plasma).
+ksni = { version = "0.3", features = ["blocking"] }
+
 [profile.release]
 lto = "thin"
 opt-level = 2
